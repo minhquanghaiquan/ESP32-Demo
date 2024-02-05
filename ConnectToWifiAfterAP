@@ -1,0 +1,76 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WebServer.h>
+#include <JsonHelper.h>
+#include "webpage.h"
+
+const char *ssid = "Wang AP";
+const char *password = "quang123";
+
+struct WiFiConfig
+{
+  String ssid;
+  String password;
+};
+
+WiFiConfig wifiConfig;
+
+WebServer server(80);
+void connectToWiFi(String ssid, String password);
+
+void setupAP(const char *ssid, const char *password)
+{
+  WiFi.softAP(ssid, password);
+  Serial.println("Access Point Started. IP: " + WiFi.softAPIP().toString());
+
+  // server
+  server.on("/", HTTP_GET, []()
+            { server.send(200, "text/html", webpage); });
+
+  server.on("/submit", HTTP_POST, []()
+            {
+    String body = server.arg("plain");
+    Serial.println("Received POST request body: " + body);
+
+  // Parse JSON
+    JsonDocument jsonDoc = parseJson(body);
+
+  if (jsonDoc["ssid"] && jsonDoc["password"])
+  {
+    server.send(200, "text/plain", "POST request received successfully!");
+    // WiFi.softAPdisconnect(true);
+    wifiConfig = {jsonDoc["ssid"], jsonDoc["password"]};
+    connectToWiFi(wifiConfig.ssid, wifiConfig.password);
+    WiFi.softAPdisconnect();
+  }
+  else
+  {
+    server.send(400, "text/plain", "Bad Request");
+  } });
+
+  server.begin();
+}
+
+void connectToWiFi(String ssid, String password)
+{
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi");
+  Serial.println(WiFi.localIP());
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  // wifi
+  setupAP(ssid, password);
+}
+
+void loop()
+{
+  server.handleClient();
+}
